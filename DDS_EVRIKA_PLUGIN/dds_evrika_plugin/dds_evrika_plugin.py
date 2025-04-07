@@ -166,6 +166,76 @@ class DDSEvrikaPlugin(Extension):
     def setup(self):
         pass
 
+    def get_imagick_path(self):
+        """Returns the path to ImageMagick executable based on the platform and installation method.
+        
+        Checks for ImageMagick in the following order:
+        1. Environment variables (MAGICK_HOME, IMAGEMAGICK_HOME)
+        2. Common installation paths
+        3. System PATH using which/where command
+        4. Bundled executable (Windows only)
+        
+        Returns:
+            str: Path to ImageMagick executable or 'magick' if not found
+        """
+        import os
+        import subprocess
+
+        # Check environment variables first
+        env_paths = []
+        for env_var in ['MAGICK_HOME', 'IMAGEMAGICK_HOME']:
+            if env_var in os.environ:
+                env_path = os.path.join(os.environ[env_var], 'magick.exe' if platform == "win32" else 'magick')
+                if os.path.exists(env_path):
+                    return env_path
+                env_paths.append(os.path.join(os.environ[env_var], 'bin', 'magick.exe' if platform == "win32" else 'magick'))
+                if os.path.exists(env_paths[-1]):
+                    return env_paths[-1]
+
+        # Platform-specific paths to check
+        paths_to_check = []
+        if platform == "win32":
+            # Windows paths
+            paths_to_check.extend([
+                os.path.join(os.path.dirname(__file__), 'resources', 'magick.exe'),  # Bundled executable
+                os.path.join(os.environ.get('ProgramFiles', ''), 'ImageMagick', 'magick.exe'),
+                os.path.join(os.environ.get('ProgramFiles(x86)', ''), 'ImageMagick', 'magick.exe'),
+            ])
+        elif platform == "darwin":  # macOS
+            paths_to_check.extend([
+                '/opt/homebrew/bin/magick',  # Apple Silicon Homebrew
+                '/usr/local/bin/magick',     # Intel Homebrew
+                '/opt/local/bin/magick',     # MacPorts
+            ])
+        else:  # Linux and other Unix-like systems
+            paths_to_check.extend([
+                '/usr/bin/magick',
+                '/usr/local/bin/magick',
+                '/opt/bin/magick',
+            ])
+
+        # Check all platform-specific paths
+        for path in paths_to_check:
+            if os.path.exists(path):
+                return path
+
+        # Try to find in PATH using which/where command
+        try:
+            if platform == "win32":
+                result = subprocess.run(['where', 'magick.exe'], capture_output=True, text=True)
+            else:
+                result = subprocess.run(['which', 'magick'], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                path = result.stdout.strip().split('\n')[0]
+                if os.path.exists(path):
+                    return path
+        except (subprocess.SubprocessError, FileNotFoundError):
+            pass
+
+        # Final fallback
+        return 'magick.exe' if platform == "win32" else 'magick'
+
     def init_translations(self):
         locale = QLocale.system()
         lang = locale.name()
@@ -263,7 +333,7 @@ class DDSEvrikaPlugin(Extension):
             os.makedirs(temp_directory_location)
 
         output_file = os.path.join(temp_directory_location, temp_filename)
-        imagick_path = os.path.join(os.path.dirname(__file__), 'resources', 'magick.exe') if platform == "win32" else 'magick'
+        imagick_path = self.get_imagick_path()
         args = [imagick_path, input_file, output_file]
 
         try:
@@ -303,7 +373,7 @@ class DDSEvrikaPlugin(Extension):
                 os.makedirs(temp_directory_location)
 
             output_file = os.path.join(temp_directory_location, temp_filename)
-            imagick_path = os.path.join(os.path.dirname(__file__), 'resources', 'magick.exe') if platform == "win32" else 'magick'
+            imagick_path = self.get_imagick_path()
             args = [imagick_path, input_file, output_file]
 
             try:
@@ -347,7 +417,7 @@ class DDSEvrikaPlugin(Extension):
         temp_png_file = os.path.join(temp_directory_location, temp_filename)
         doc.saveAs(temp_png_file)
 
-        imagick_path = os.path.join(os.path.dirname(__file__), "resources", "magick.exe") if platform == "win32" else "magick"
+        imagick_path = self.get_imagick_path()
         args = [imagick_path, temp_png_file]
 
         compression_format = self.settings.get("export_compression", "dxt1")
@@ -438,7 +508,7 @@ class DDSEvrikaPlugin(Extension):
             os.makedirs(temp_directory_location)
 
         output_file = os.path.join(temp_directory_location, temp_filename)
-        imagick_path = os.path.join(os.path.dirname(__file__), 'resources', 'magick.exe') if platform == "win32" else 'magick'
+        imagick_path = self.get_imagick_path()
         args = [imagick_path, input_file, output_file]
 
         #if compression_format != "none":
@@ -480,7 +550,7 @@ class DDSEvrikaPlugin(Extension):
         doc.saveAs(temp_png_file)
 
         # Путь для работы с ImageMagick
-        imagick_path = os.path.join(os.path.dirname(__file__), "resources", "magick.exe") if platform == "win32" else "magick"
+        imagick_path = self.get_imagick_path()
 
         # Создаем список аргументов для команды
         args = [imagick_path, temp_png_file]
